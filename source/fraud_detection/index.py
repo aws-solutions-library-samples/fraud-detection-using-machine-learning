@@ -57,7 +57,7 @@ def get_fraud_prediction(data):
     return pred
 
 def postprocess_event(event, pred):
-    millisecond_regex = r'\\.\\d+'
+    millisecond_regex = r'\.\d+'
     timestamp = re.sub(millisecond_regex, '', str(datetime.datetime.now()))
     source = random.choice(['Mobile', 'Web', 'Store'])
     return [timestamp, 'random_id', source, str(pred)]
@@ -65,6 +65,6 @@ def postprocess_event(event, pred):
 def store_data_prediction(data):
     firehose_delivery_stream = 'fraud-detection-firehose-stream'
     firehose = boto3.client('firehose', region_name=os.environ['AWS_REGION'])
-    record = ','.join(data) + '\\n'
+    record = ','.join(data) + '\n'
     response = firehose.put_record(DeliveryStreamName=firehose_delivery_stream, Record={'Data': record})
     return response
