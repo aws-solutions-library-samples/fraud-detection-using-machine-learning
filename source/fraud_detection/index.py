@@ -14,57 +14,75 @@
 ##############################################################################
 import json
 import os
-import boto3
 import random
 import datetime
 import re
+import logging
+
+import boto3
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
 
 def lambda_handler(event, context):
-    data_payload = get_data(event, context)
-    if not data_payload:
-        return
-    pred = get_fraud_prediction(data_payload)
-    transformed_data = postprocess_event(event, pred)
-    response = store_data_prediction(transformed_data)
-    print(response)
+    logger.info(event)
+    metadata = event.get('metadata', None)
+    assert metadata, "Request did not include metadata!"
+    data_payload = event.get('data', None)
+    assert data_payload, "Payload did not include a data field!"
+    model_choice = event.get('model', None)
+    valid_models = set(['anomaly_detector', 'fraud_classifier'])
+    if model_choice:
+        assert model_choice in valid_models, "The requested model, {}, was not a valid model name {}".format(model_choice, valid_models)
+    models = set([model_choice]) if model_choice else valid_models
 
-def get_data(event, context):
-    if random.random() < 0.15:
-        return
-    non_fraud_example = [1.00000000e+00, -9.66271698e-01, -1.85226008e-01, 1.79299331e+00, -8.63291264e-01, -1.03088794e-02, 1.24720311e+00, 2.37608939e-01,
-                         3.77435863e-01, -1.38702404e+00, -5.49519211e-02, -2.26487264e-01, 1.78228229e-01, 5.07756889e-01, -2.87923753e-01, -6.31418109e-01,
-                         -1.05964720e+00, -6.84092760e-01, 1.96577501e+00, -1.23262203e+00, -2.08037779e-01, -1.08300455e-01, 5.27359685e-03, -1.90320522e-01,
-                         -1.17557538e+00, 6.47376060e-01, -2.21928850e-01, 6.27228469e-02, 6.14576302e-02, 1.23500000e+02]
-    fraud_example = [4.0600000e+02, -2.3122265e+00, 1.9519920e+00, -1.6098508e+00, 3.9979055e+00, -5.2218789e-01, -1.4265453e+00, -2.5373874e+00,
-                     1.3916572e+00, -2.7700894e+00, -2.7722721e+00, 3.2020333e+00, -2.8999074e+00, -5.9522188e-01, -4.2892537e+00, 3.8972411e-01, -1.1407472e+00,
-                     -2.8300557e+00, -1.6822468e-02, 4.1695571e-01, 1.2691055e-01, 5.1723236e-01, -3.5049368e-02, -4.6521106e-01, 3.2019821e-01, 4.4519167e-02,
-                     1.7783980e-01, 2.6114500e-01, -1.4327587e-01, 0.0000000e+00]
-    examples = [fraud_example, non_fraud_example]
-    idx = 1
-    if random.random() < 0.05:
-        idx = 0
-    return ','.join(map(str, examples[idx]))
+    output = {}
+    if 'anomaly_detector' in models:
+        output["anomaly_detector"] = get_anomaly_prediction(data_payload)
 
-def get_fraud_prediction(data):
+    if 'fraud_classifier' in models:
+        output["fraud_classifier"] = get_fraud_prediction(data_payload)
+
+    success = store_data_prediction(output, metadata)
+    return output
+
+
+def get_anomaly_prediction(data):
+    sagemaker_endpoint_name = 'random-cut-forest-endpoint'
+    sagemaker_runtime = boto3.client('sagemaker-runtime')
+    response = sagemaker_runtime.invoke_endpoint(EndpointName=sagemaker_endpoint_name, ContentType='text/csv',
+                                                 Body=data)
+    # Extract anomaly score from the endpoint response
+    anomaly_score = json.loads(response['Body'].read().decode())["scores"][0]["score"]
+    logger.info("anomaly score: {}".format(anomaly_score))
+
+    return {"score": anomaly_score}
+
+
+def get_fraud_prediction(data, threshold=0.5):
     sagemaker_endpoint_name = 'fraud-detection-endpoint'
     sagemaker_runtime = boto3.client('sagemaker-runtime')
     response = sagemaker_runtime.invoke_endpoint(EndpointName=sagemaker_endpoint_name, ContentType='text/csv',
                                                  Body=data)
-    print(response)
-    result = json.loads(response['Body'].read().decode())
-    print(result)
-    pred = int(result['predictions'][0]['predicted_label'])
-    return pred
+    pred_proba = json.loads(response['Body'].read().decode())
+    prediction = 0 if pred_proba < threshold else 1
+    # Note: XGBoost returns a float as a prediction, a linear learner would require different handling.
+    logger.info("classification pred_proba: {}, prediction: {}".format(pred_proba, prediction))
 
-def postprocess_event(event, pred):
-    millisecond_regex = r'\.\d+'
-    timestamp = re.sub(millisecond_regex, '', str(datetime.datetime.now()))
-    source = random.choice(['Mobile', 'Web', 'Store'])
-    return [timestamp, 'random_id', source, str(pred)]
+    return {"pred_proba": pred_proba, "prediction": prediction}
 
-def store_data_prediction(data):
+
+def store_data_prediction(output_dict, metadata):
     firehose_delivery_stream = 'fraud-detection-firehose-stream'
     firehose = boto3.client('firehose', region_name=os.environ['AWS_REGION'])
-    record = ','.join(data) + '\n'
-    response = firehose.put_record(DeliveryStreamName=firehose_delivery_stream, Record={'Data': record})
-    return response
+
+    # Extract anomaly score and classifier prediction, if they exist
+    fraud_pred = output_dict["fraud_classifier"]["prediction"] if 'fraud_classifier' in output_dict else ""
+    anomaly_score = output_dict["anomaly_detector"]["score"] if 'anomaly_detector' in output_dict else ""
+
+    record = ','.join(metadata + [str(fraud_pred), str(anomaly_score)]) + '\n'
+
+    success = firehose.put_record(DeliveryStreamName=firehose_delivery_stream, Record={'Data': record})
+    logger.info("Record logged: {}".format(record))
+    return success

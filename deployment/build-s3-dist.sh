@@ -82,3 +82,7 @@ cp -r $source_dir/notebooks $build_dist_dir/
 echo "Packaging fraud_detection lambda"
 cd $source_dir/fraud_detection/
 zip -q -r9 $build_dist_dir/fraud_detection.zip *
+
+# Copy installation script to $deployment_dir/dist
+echo "Copying install script to $deployment_dir/dist"
+cp $source_dir/setup/on-start.sh $build_dist_dir/notebooks
