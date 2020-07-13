@@ -45,17 +45,7 @@ Metadata:
 Mappings:
   Function:
     FraudDetection:
-      S3Key: fraud-detection-using-machine-learning/build/model_invocation.zip
-  Notebook:
-    FraudDetection:
-      S3Key: >-
-        /fraud-detection-using-machine-learning/notebooks/sagemaker_fraud_detection.ipynb
-  Script:
-    GenerateTraffic:
-      S3Key: >-
-        /fraud-detection-using-machine-learning/notebooks/generate_endpoint_traffic.py
-    KibanaDashboard:
-      S3Key: /fraud-detection-using-machine-learning/notebooks/dashboard.json
+      S3Key: Fraud-detection-using-machine-learning/build/model_invocation.zip
 Resources:
   ModelDataBucket:
     Type: 'AWS::S3::Bucket'

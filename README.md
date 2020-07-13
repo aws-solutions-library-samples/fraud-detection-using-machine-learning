@@ -44,10 +44,15 @@ In order to encapsulate the project as a stand-alone microservice, Amazon API Ga
 * `deployment/`
   * `fraud-detection-using-machine-learning.yaml`: Creates AWS CloudFormation Stack for solution
 * `source/`
-  * `fraud-detection/`
+  * `lambda`
+    * `model-invocation/`
       * `index.py`: Lambda function script for invoking SageMaker endpoints for inference
   * `notebooks/`
-    * `generate_endpoint_traffic.py`: Custom script to show how to send transaction traffic to REST API for inference
+    * `src`
+      * `package`
+        * `config.py`: Read in the environment variables set by cloudformation stack creation
+        * `generate_endpoint_traffic.py`: Custom script to show how to send transaction traffic to REST API for inference
+        * `util.py`: Helper function and utilities
     * `sagemaker_fraud_detection.ipynb`: Orchestrates the solution. Trains the models and deploys the trained model
   * `setup/`
     * `on-start.sh`: Bash script to setup sagemaker notebook environment with necessary dependencies
