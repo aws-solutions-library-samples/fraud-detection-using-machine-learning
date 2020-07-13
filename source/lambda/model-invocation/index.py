@@ -14,9 +14,6 @@
 ##############################################################################
 import json
 import os
-import random
-import datetime
-import re
 import logging
 
 import boto3
@@ -32,10 +29,10 @@ def lambda_handler(event, context):
     data_payload = event.get('data', None)
     assert data_payload, "Payload did not include a data field!"
     model_choice = event.get('model', None)
-    valid_models = set(['anomaly_detector', 'fraud_classifier'])
+    valid_models = {'anomaly_detector', 'fraud_classifier'}
     if model_choice:
         assert model_choice in valid_models, "The requested model, {}, was not a valid model name {}".format(model_choice, valid_models)
-    models = set([model_choice]) if model_choice else valid_models
+    models = {model_choice} if model_choice else valid_models
 
     output = {}
     if 'anomaly_detector' in models:
@@ -44,7 +41,7 @@ def lambda_handler(event, context):
     if 'fraud_classifier' in models:
         output["fraud_classifier"] = get_fraud_prediction(data_payload)
 
-    success = store_data_prediction(output, metadata)
+    store_data_prediction(output, metadata)
     return output
 
 
@@ -67,7 +64,7 @@ def get_fraud_prediction(data, threshold=0.5):
                                                  Body=data)
     pred_proba = json.loads(response['Body'].read().decode())
     prediction = 0 if pred_proba < threshold else 1
-    # Note: XGBoost returns a float as a prediction, a linear learner would require different handling.
+
     logger.info("classification pred_proba: {}, prediction: {}".format(pred_proba, prediction))
 
     return {"pred_proba": pred_proba, "prediction": prediction}
@@ -84,5 +81,7 @@ def store_data_prediction(output_dict, metadata):
     record = ','.join(metadata + [str(fraud_pred), str(anomaly_score)]) + '\n'
 
     success = firehose.put_record(DeliveryStreamName=firehose_delivery_stream, Record={'Data': record})
-    logger.info("Record logged: {}".format(record))
-    return success
+    if success:
+        logger.info("Record logged: {}".format(record))
+    else:
+        logger.warning("Record delivery failed for record: {}".format(record))

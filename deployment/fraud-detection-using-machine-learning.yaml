@@ -1,0 +1,661 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  (SO0056) - fraud-detection-using-machine-learning: Solution for predicting
+  fraud events with ML using Amazon SageMaker. Version 3
+Parameters:
+  ModelDataBucketName:
+    Type: String
+    Description: New bucket for storing the Amazon SageMaker model and training data.
+  OutputBucketName:
+    Type: String
+    Description: Bucket to store the predictions to be visualized using Quicksight.
+  KinesisFirehosePrefix:
+    Type: String
+    Default: fraud-detection/firehose/
+    Description: Kinesis Firehose prefix for delivery of processed events.
+  SolutionsS3BucketName:
+    Description: Enter the name of the S3 bucket for the solution
+    Type: String
+    Default:  "sagemaker-solutions"
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Amazon S3 Bucket Configuration
+        Parameters:
+          - ModelDataBucketName
+          - OutputBucketName
+      - Label:
+          default: Amazon Kinesis Firehose Configuration
+        Parameters:
+          - KinesisFirehosePrefix
+      - Label:
+          default: Solution Configuration Parameters
+        Parameters:
+          - SolutionsS3BucketName
+    ParameterLabels:
+      SolutionsS3BucketName:
+        default: SageMaker Solution Bucket Base Name
+      ModelDataBucketName:
+        default: Model and Data Bucket Name
+      OutputBucketName:
+        default: Prediction Output Bucket Name
+      KinesisFirehosePrefix:
+        default: Kinesis Firehose S3 Prefix
+Mappings:
+  Function:
+    FraudDetection:
+      S3Key: fraud-detection-using-machine-learning/build/model_invocation.zip
+  Notebook:
+    FraudDetection:
+      S3Key: >-
+        /fraud-detection-using-machine-learning/notebooks/sagemaker_fraud_detection.ipynb
+  Script:
+    GenerateTraffic:
+      S3Key: >-
+        /fraud-detection-using-machine-learning/notebooks/generate_endpoint_traffic.py
+    KibanaDashboard:
+      S3Key: /fraud-detection-using-machine-learning/notebooks/dashboard.json
+Resources:
+  ModelDataBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref ModelDataBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LogBucket
+        LogFilePrefix: fraud-model-data-bucket/
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: >-
+              Configuring logging requires supplying an existing customer S3
+              bucket to store logs
+          - id: W51
+            reason: Default policy works fine
+  S3Bucket2:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref OutputBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LogBucket
+        LogFilePrefix: fraud-output-bucket/
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: >-
+              Configuring logging requires supplying an existing customer S3
+              bucket to store logs
+          - id: W51
+            reason: Default policy works fine
+  LogBucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+    Properties:
+      AccessControl: LogDeliveryWrite
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: this is the log bucket
+  LogBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref LogBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: 's3:GetBucketAcl'
+            Resource: !GetAtt
+              - LogBucket
+              - Arn
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: 's3:PutObject'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref LogBucket
+                - /AWSLogs/
+                - !Ref 'AWS::AccountId'
+                - /*
+            Condition:
+              StringEquals:
+                's3:x-amz-acl': bucket-owner-full-control
+  BasicNotebookInstance:
+    Type: 'AWS::SageMaker::NotebookInstance'
+    Properties:
+      InstanceType: ml.t3.medium
+      NotebookInstanceName: FraudDetectionNotebookInstance
+      RoleArn: !GetAtt
+        - NotebookInstanceExecutionRole
+        - Arn
+      LifecycleConfigName: !GetAtt
+        - BasicNotebookInstanceLifecycleConfig
+        - NotebookInstanceLifecycleConfigName
+    DependsOn:
+      - NotebookInstanceIAMPolicy
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W1201
+            reason: Solution does not have KMS encryption enabled by default
+  BasicNotebookInstanceLifecycleConfig:
+    Type: 'AWS::SageMaker::NotebookInstanceLifecycleConfig'
+    DependsOn:
+      - ModelDataBucket
+    Properties:
+      OnCreate:
+        - Content:
+            Fn::Base64: !Sub |
+              set -e
+              # perform following actions as ec2-user
+              sudo -u ec2-user -i <<EOF
+              cd /home/ec2-user/SageMaker
+              # copy source files
+              aws s3 sync s3://${SolutionsS3BucketName}-${AWS::Region}/Fraud-detection-using-machine-learning/ .
+              # set environment variables via .env file
+              touch .env
+              echo "AWS_ACCOUNT_ID=${AWS::AccountId}" >> .env
+              echo "AWS_REGION=${AWS::Region}" >> .env
+              echo "SAGEMAKER_IAM_ROLE=${NotebookInstanceExecutionRole.Arn}" >> .env
+              echo "SOLUTIONS_S3_BUCKET=${SolutionsS3BucketName}-${AWS::Region}" >> .env
+              echo "MODEL_DATA_S3_BUCKET=${ModelDataBucketName}" >> .env
+              echo "REST_API_GATEWAY=${RESTAPIGateway}" >> .env
+              EOF
+      OnStart:
+        - Content:
+            Fn::Base64: !Sub |
+              set -e
+              # perform following actions as ec2-user
+              sudo -u ec2-user -i <<EOF
+              cd /home/ec2-user/SageMaker
+              # install Python dependencies in the python3 conda environment
+              source /home/ec2-user/anaconda3/bin/activate python3
+              pip install --upgrade pip==20.1.1
+              # Requirements to run the notebook and local installation of the solution's code
+              pip install -r ./source/notebooks/requirements.txt
+              pip install -e ./source/notebooks/
+              # Necessary to avoid issues with containers using this as entry point
+              rm -rf ./source/notebooks/src/package.egg-info
+              EOF
+  NotebookInstanceExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - sagemaker.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  NotebookInstanceIAMPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: fraud-detection-notebook-instance-policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          # Can list the contents of the SageMaker Solutions Amazon S3 Bucket
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              - !Sub "arn:aws:s3:::${SolutionsS3BucketName}-${AWS::Region}"
+          # Can get objects from the SageMaker Solutions Amazon S3 Bucket
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource:
+              - !Sub "arn:aws:s3:::${SolutionsS3BucketName}-${AWS::Region}/*"
+          - Effect: Allow
+            Action:
+              - 's3:GetBucketLocation'
+              - 's3:ListBucket'
+              - 's3:GetObject'
+              - 's3:PutObject'
+              - 's3:DeleteObject'
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref ModelDataBucketName
+              - !Join
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref ModelDataBucketName
+                  - /*
+          - Effect: Allow
+            Action:
+              - 'sagemaker:CreateTrainingJob'
+              - 'sagemaker:DescribeTrainingJob'
+              - 'sagemaker:CreateModel'
+              - 'sagemaker:DescribeModel'
+              - 'sagemaker:DeleteModel'
+              - 'sagemaker:CreateEndpoint'
+              - 'sagemaker:CreateEndpointConfig'
+              - 'sagemaker:DescribeEndpoint'
+              - 'sagemaker:DescribeEndpointConfig'
+              - 'sagemaker:DeleteEndpoint'
+              - 'sagemaker:DeleteEndpointConfig'
+              - 'sagemaker:InvokeEndpoint'
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:sagemaker:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':*'
+          - Effect: Allow
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:ecr:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':repository/*'
+          - Effect: Allow
+            Action:
+              - 'ec2:CreateVpcEndpoint'
+              - 'ec2:DescribeRouteTables'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'cloudwatch:PutMetricData'
+              - 'cloudwatch:GetMetricData'
+              - 'cloudwatch:GetMetricStatistics'
+              - 'cloudwatch:ListMetrics'
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:cloudwatch:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':*'
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:DescribeLogStreams'
+              - 'logs:GetLogEvents'
+              - 'logs:PutLogEvents'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:logs:'
+                - !Ref 'AWS::Region'
+                - ':'
+                - !Ref 'AWS::AccountId'
+                - ':log-group:/aws/sagemaker/*'
+          - Effect: Allow
+            Action:
+              - 'iam:PassRole'
+            Resource:
+              - !GetAtt
+                - NotebookInstanceExecutionRole
+                - Arn
+            Condition:
+              StringEquals:
+                'iam:PassedToService': sagemaker.amazonaws.com
+          - Effect: Allow
+            Action:
+              - 'iam:GetRole'
+            Resource:
+              - !GetAtt
+                - NotebookInstanceExecutionRole
+                - Arn
+          - Effect: Allow
+            Action:
+              - 'execute-api:Invoke'
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:execute-api:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':'
+                  - !Ref RESTAPIGateway
+                  - /*/POST/*
+      Roles:
+        - !Ref NotebookInstanceExecutionRole
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: >-
+              This policy needs to have * resource because some of the resources
+              are created dynamically and some of its actions are * resource
+              actions
+  LambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: index.lambda_handler
+      FunctionName: fraud-detection-event-processor
+      Role: !GetAtt
+        - LambdaExecutionRole
+        - Arn
+      Code:
+        S3Bucket: !Sub "${SolutionsS3BucketName}-${AWS::Region}"
+        S3Key: !FindInMap
+          - Function
+          - FraudDetection
+          - S3Key
+      Runtime: python3.6
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: !Join
+                  - ''
+                  - - 'arn:aws:logs:'
+                    - !Ref 'AWS::Region'
+                    - ':'
+                    - !Ref 'AWS::AccountId'
+                    - ':log-group:/aws/lambda/*'
+              - Effect: Allow
+                Action:
+                  - 'sagemaker:InvokeEndpoint'
+                Resource:
+                  - 'arn:aws:sagemaker:*:*:endpoint/*'
+              - Effect: Allow
+                Action:
+                  - 'firehose:PutRecord'
+                  - 'firehose:PutRecordBatch'
+                Resource: !GetAtt
+                  - KinesisFirehoseDeliveryStream
+                  - Arn
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W11
+            reason: >-
+              This role needs to have * resource in it's policy because resource
+              names are created dynamically and some of its actions are *
+              resource actions
+  KinesisFirehoseDeliveryStream:
+    Type: 'AWS::KinesisFirehose::DeliveryStream'
+    Properties:
+      DeliveryStreamName: fraud-detection-firehose-stream
+      DeliveryStreamType: DirectPut
+      S3DestinationConfiguration:
+        BucketARN: !GetAtt
+          - S3Bucket2
+          - Arn
+        Prefix: !Ref KinesisFirehosePrefix
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 100
+        CompressionFormat: GZIP
+        EncryptionConfiguration:
+          NoEncryptionConfig: NoEncryption
+        RoleARN: !GetAtt
+          - FirehoseDeliveryIAMRole
+          - Arn
+    DependsOn:
+      - FirehoseDeliveryIAMPolicy
+  FirehoseDeliveryIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  FirehoseDeliveryIAMPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: fraud-detection-firehose-policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:AbortMultipartUpload'
+              - 's3:GetBucketLocation'
+              - 's3:GetObject'
+              - 's3:ListBucket'
+              - 's3:ListBucketMultipartUploads'
+              - 's3:PutObject'
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref OutputBucketName
+              - !Join
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref OutputBucketName
+                  - /
+                  - !Ref KinesisFirehosePrefix
+                  - '*'
+      Roles:
+        - !Ref FirehoseDeliveryIAMRole
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: >-
+              This policy needs to have * resource because some of its actions
+              are * resource actions
+  RESTAPIGateway:
+    Type: 'AWS::ApiGateway::RestApi'
+    Properties:
+      Description: >-
+        A REST API that can be used to invoke the Lambda function that triggers
+        predictions.
+      Name: model-invocation-api
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+  APIGatewayCloudWatchLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Join
+        - /
+        - - /aws/apigateway/AccessLogs
+          - !Ref RESTAPIGateway
+          - prod
+      RetentionInDays: 365
+  APIGatewayCloudWatchRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - >-
+          arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+  APIGatewayAccount:
+    Type: 'AWS::ApiGateway::Account'
+    Properties:
+      CloudWatchRoleArn: !GetAtt
+        - APIGatewayCloudWatchRole
+        - Arn
+    DependsOn:
+      - RESTAPIGateway
+  LambdaAPIPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt
+        - LambdaFunction
+        - Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Join
+        - ''
+        - - 'arn:aws:execute-api:'
+          - !Ref 'AWS::Region'
+          - ':'
+          - !Ref 'AWS::AccountId'
+          - ':'
+          - !Ref RESTAPIGateway
+          - /*/POST/*
+  RESTInvocationResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !GetAtt
+        - RESTAPIGateway
+        - RootResourceId
+      PathPart: invocations
+      RestApiId: !Ref RESTAPIGateway
+  POSTMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      RestApiId: !Ref RESTAPIGateway
+      ResourceId: !Ref RESTInvocationResource
+      HttpMethod: POST
+      AuthorizationType: AWS_IAM
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Join
+          - ''
+          - - 'arn:aws:apigateway:'
+            - !Ref 'AWS::Region'
+            - ':lambda:path/2015-03-31/functions/'
+            - !GetAtt
+              - LambdaFunction
+              - Arn
+            - /invocations
+        IntegrationResponses:
+          - ResponseTemplates:
+              application/json: ''
+            StatusCode: 200
+          - SelectionPattern: ^not found.*
+            ResponseTemplates:
+              application/json: '{}'
+            StatusCode: 404
+        PassthroughBehavior: WHEN_NO_TEMPLATES
+        RequestTemplates:
+          application/json: >-
+            {"data": $input.json('$.data'),"metadata":
+            $input.json('$.metadata'),"model": "$input.params('model')"}
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: 200
+        - ResponseModels:
+            application/json: Empty
+          StatusCode: 404
+      RequestParameters:
+        method.request.querystring.model: false
+  RestApiDeployment:
+    Type: 'AWS::ApiGateway::Deployment'
+    Properties:
+      StageDescription:
+        AccessLogSetting:
+          DestinationArn: !GetAtt
+            - APIGatewayCloudWatchLogGroup
+            - Arn
+          Format: !Join
+            - ','
+            - - '{"requestId":"$context.requestId"'
+              - '"ip": "$context.identity.sourceIp"'
+              - '"caller":"$context.identity.caller"'
+              - '"user":"$context.identity.user"'
+              - '"requestTime":"$context.requestTime"'
+              - '"httpMethod":"$context.httpMethod"'
+              - '"resourcePath":"$context.resourcePath"'
+              - '"status":"$context.status"'
+              - '"protocol":"$context.protocol"'
+              - '"responseLength":"$context.responseLength"}'
+      RestApiId: !Ref RESTAPIGateway
+      StageName: prod
+    DependsOn:
+      - POSTMethod
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W68
+            reason: Resource not associated with an AWS::ApiGateway::UsagePlan for now
+Outputs:
+  JupyterInterface:
+    Description: "Open Jupyter IDE. This authenticates you against Jupyter."
+    Value: !Sub "https://console.aws.amazon.com/sagemaker/home?region=${AWS::Region}#/notebook-instances/openNotebook/FraudDetectionNotebookInstance?view=classic"
+  SageMakerNotebook:
+    Description: "Open Jupyter notebook kick off model training"
+    Value: !Sub "https://frauddetectionnotebookinstance.notebook.${AWS::Region}.sagemaker.aws/notebooks/source/notebooks/sagemaker_fraud_detection.ipynb"
+  FirehoseDeliveryStreamArn:
+    Description: Firehose Delivery Stream ARN
+    Value: !GetAtt
+      - KinesisFirehoseDeliveryStream
+      - Arn
+  FirehoseDeliveryRoleArn:
+    Description: Firehose Delivery Role ARN
+    Value: !GetAtt
+      - FirehoseDeliveryIAMRole
+      - Arn
+  RestApiId:
+    Value: !Ref RESTAPIGateway

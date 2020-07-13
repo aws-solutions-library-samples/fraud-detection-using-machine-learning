@@ -1,0 +1,12 @@
+imbalanced-learn
+aws_requests_auth
+matplotlib
+scikit-learn
+pandas
+sagemaker
+boto3
+seaborn
+docutils==0.14
+awscli
+botocore==1.17.4
+python-dotenv
