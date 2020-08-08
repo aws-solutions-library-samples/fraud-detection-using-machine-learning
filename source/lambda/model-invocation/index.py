@@ -21,6 +21,7 @@ import boto3
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+STACK_NAME = os.environ['StackName']
 
 def lambda_handler(event, context):
     logger.info(event)
@@ -46,10 +47,10 @@ def lambda_handler(event, context):
 
 
 def get_anomaly_prediction(data):
-    sagemaker_endpoint_name = 'random-cut-forest-endpoint'
+    sagemaker_endpoint_name = "{}-rcf".format(STACK_NAME)
     sagemaker_runtime = boto3.client('sagemaker-runtime')
-    response = sagemaker_runtime.invoke_endpoint(EndpointName=sagemaker_endpoint_name, ContentType='text/csv',
-                                                 Body=data)
+    response = sagemaker_runtime.invoke_endpoint(
+        EndpointName=sagemaker_endpoint_name, ContentType='text/csv', Body=data)
     # Extract anomaly score from the endpoint response
     anomaly_score = json.loads(response['Body'].read().decode())["scores"][0]["score"]
     logger.info("anomaly score: {}".format(anomaly_score))
@@ -58,10 +59,10 @@ def get_anomaly_prediction(data):
 
 
 def get_fraud_prediction(data, threshold=0.5):
-    sagemaker_endpoint_name = 'fraud-detection-endpoint'
+    sagemaker_endpoint_name = "{}-xgb".format(STACK_NAME)
     sagemaker_runtime = boto3.client('sagemaker-runtime')
-    response = sagemaker_runtime.invoke_endpoint(EndpointName=sagemaker_endpoint_name, ContentType='text/csv',
-                                                 Body=data)
+    response = sagemaker_runtime.invoke_endpoint(
+        EndpointName=sagemaker_endpoint_name, ContentType='text/csv',Body=data)
     pred_proba = json.loads(response['Body'].read().decode())
     prediction = 0 if pred_proba < threshold else 1
 
@@ -80,7 +81,8 @@ def store_data_prediction(output_dict, metadata):
 
     record = ','.join(metadata + [str(fraud_pred), str(anomaly_score)]) + '\n'
 
-    success = firehose.put_record(DeliveryStreamName=firehose_delivery_stream, Record={'Data': record})
+    success = firehose.put_record(
+        DeliveryStreamName=firehose_delivery_stream, Record={'Data': record})
     if success:
         logger.info("Record logged: {}".format(record))
     else:

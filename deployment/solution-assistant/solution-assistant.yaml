@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Stack for Solution Helper resources.
+Parameters:
+  StackName:
+    Description: |
+      Used as a prefix to name all stack resources.
+      Should be root stack's name if this is a nested stack.
+    Type: String
+  ModelDataBucketName:
+    Description: Amazon S3 Bucket used to store trained model and data.
+    Type: String
+  OutputBucketName:
+    Description: Amazon S3 Bucket used to store prediction outputs.
+    Type: String
+  LogBucketName:
+    Description: Amazon S3 Bucket used to S3 access logs.
+    Type: String
+  SolutionsS3BucketName:
+    Description: Amazon S3 Bucket containing solutions.
+    Type: String
+Mappings:
+  Function:
+    SolutionAssistant:
+      S3Key: "Fraud-detection-using-machine-learning/build/solution_assistant.zip"
+Resources:
+  SolutionAssistant:
+    Type: "Custom::SolutionAssistant"
+    Properties:
+      ServiceToken: !GetAtt SolutionAssistantLambda.Arn
+      StackName: !Ref StackName
+      ModelDataBucketName: !Ref ModelDataBucketName
+      OutputBucketName: !Ref OutputBucketName
+      LogBucketName: !Ref LogBucketName
+      SolutionsS3BucketName: !Ref SolutionsS3BucketName
+  SolutionAssistantLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: "lambda_function.handler"
+      FunctionName: !Sub "${StackName}-solution-assistant"
+      Role: !GetAtt SolutionAssistantLambdaRole.Arn
+      Runtime: "python3.8"
+      Code:
+        S3Bucket: !Ref SolutionsS3BucketName
+        S3Key: !FindInMap
+          - Function
+          - SolutionAssistant
+          - S3Key
+      Timeout : 60
+  SolutionAssistantLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        -
+          PolicyName: SolutionCleanupPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource:
+                - !Sub "arn:aws:s3:::${SolutionsS3BucketName}"
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub "arn:aws:s3:::${SolutionsS3BucketName}/*"
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+                - s3:DeleteBucket
+              Resource:
+                - !Sub "arn:aws:s3:::${ModelDataBucketName}"
+                - !Sub "arn:aws:s3:::${OutputBucketName}"
+                - !Sub "arn:aws:s3:::${LogBucketName}"
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+                - s3:AbortMultipartUpload
+              Resource:
+                - !Sub "arn:aws:s3:::${ModelDataBucketName}/*"
+                - !Sub "arn:aws:s3:::${OutputBucketName}/*"
+                - !Sub "arn:aws:s3:::${LogBucketName}/*"
+            - Effect: Allow
+              Action:
+                - sagemaker:DeleteModel
+              Resource:
+                - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:model/*"
+            - Effect: Allow
+              Action:
+                - sagemaker:DeleteEndpointConfig
+              Resource:
+                - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint-config/*"
+            - Effect: Allow
+              Action:
+                - sagemaker:DeleteEndpoint
+              Resource:
+                - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/*"
+                - !Sub "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint-config/*"

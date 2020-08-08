@@ -1,2 +1,18 @@
-Fraud Detection Using Machine Learning
-Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+Fraud Detection using Machine Learing
+Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+**********************
+THIRD PARTY COMPONENTS
+**********************
+This software includes third party software subject to the following copyrights:
+
+Boto 3 - The AWS SDK for Python under the Apache 2.0 License
+requests - A simple, yet elegant HTTP library under the Apache 2.0 License
+aws-requests-auth under the BSD 3-Clause License
+pandas under the BSD 3-Clause License
+numpy under the BSD 3-Clause License
+scipy under the BSD 3-Clause License
+seaborn under the BSD 3-Clause License
+scikit-learn under the BSD 3-Clause License
+imbalanced-learn under the MIT License
+torch under the BSD 3-Clause License
