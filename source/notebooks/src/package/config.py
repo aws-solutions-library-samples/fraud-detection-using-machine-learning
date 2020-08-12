@@ -11,6 +11,7 @@ assert dotenv_filepath.exists(), "Could not find .env file at {}".format(str(dot
 
 load_dotenv()
 
+STACK_NAME = os.environ['FRAUD_STACK_NAME']
 AWS_ACCOUNT_ID = os.environ['AWS_ACCOUNT_ID']
 AWS_REGION = os.environ['AWS_REGION']
 SAGEMAKER_IAM_ROLE = os.environ['SAGEMAKER_IAM_ROLE']

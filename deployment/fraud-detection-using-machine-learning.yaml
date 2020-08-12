@@ -167,8 +167,6 @@ Resources:
                 cd /home/ec2-user/SageMaker
                 # copy source files
                 aws s3 sync s3://${SolutionsS3BucketNamePrefix}-${AWS::Region}/Fraud-detection-using-machine-learning/ .
-                # copy data and unzip
-                aws s3 cp s3://sagemaker-e2e-solutions/fraud-detection/creditcardfraud.zip .
                 unzip creditcardfraud.zip -d ./source/notebooks/
                 # set environment variables via .env file
                 touch .env

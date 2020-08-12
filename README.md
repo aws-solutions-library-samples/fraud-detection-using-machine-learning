@@ -10,14 +10,16 @@ To get started quickly, use the following quick-launch link to launch a CloudFor
 
 | Region | Stack |
 | ---- | ---- |
+|US East (N. Virginia) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=https://sagemaker-solutions-us-east-1.s3.amazonaws.com/Fraud-detection-using-machine-learning/build/packaged.yaml&stackName=SageMaker-Fraud-Machine-Learning) |
+|US East (Ohio) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-east-2.console.aws.amazon.com/cloudformation/home?region=us-east-2#/stacks/create/review?templateURL=https://sagemaker-solutions-us-east-2.s3-us-east-2.amazonaws.com/Fraud-detection-using-machine-learning/build/packaged.yaml&stackName=SageMaker-Fraud-Machine-Learning) |
 |US West (Oregon) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?templateURL=https://sagemaker-solutions-us-west-2.s3-us-west-2.amazonaws.com/Fraud-detection-using-machine-learning/build/packaged.yaml&stackName=SageMaker-Fraud-Machine-Learning) |
 
 
 ### Additional Instructions
 
-* On the stack creation page, enter a name in the **Model and Data Bucket Name** field under S3 configurations and in the **Results Bucket Name**, check the box to acknowledge creation of IAM resources, and click **Create Stack**. This should trigger the creation of the CloudFormation stack.
+* On the stack creation page, check the box to acknowledge creation of IAM resources, and click **Create Stack**. This should trigger the creation of the CloudFormation stack.
 
-* Once the stack is created, go to the Outputs tab and click on the *SageMakerNotebook* link. This will open up the jupyter notebook in a SageMaker Notebook instance where you can run the code in the notebook.
+* Once the stack is created, go to the Outputs tab and click on the *SageMakerNotebook* link. This will open up a Jupyter notebook named `sagemaker_fraud_detection` in a SageMaker Notebook instance where you can run the code. Follow the instructions in the notebook to run the solution. You can use `Cells->Run All` from the Jupyter menu to run all cells, and return to the notebook later after all cells have executed. The total time to run all cells should be around 40 minutes.
 
 ## Architecture
 
@@ -37,6 +39,32 @@ Both of the trained models are deployed to Amazon SageMaker managed real-time en
 The model training and endpoint deployment is orchestrated by running a [jupyter notebook](source/notebooks/sagemaker_fraud_detection.ipynb) on a SageMaker Notebook instance. The jupyter notebook runs a demonstration of the project using the aforementioned anonymized credit card dataset that is automatically downloaded to the Amazon S3 Bucket created when you launch the solution. However, the notebook can be modified to run the project on a custom dataset in S3. The notebook instance also contains some example code that shows how to invoke the REST API for inference.
 
 In order to encapsulate the project as a stand-alone microservice, Amazon API Gateway is used to provide a REST API, that is backed by an AWS Lambda function. The Lambda function runs the [code](https://github.com/awslabs/fraud-detection-using-machine-learning/blob/master/source/fraud_detection/index.py) to preprocess incoming transactions, invoke sagemaker endpoints, merge results from both endpoints if necessary, store the model inputs and model predictions in S3 via Kinesis Firehose, and provide a response to the client.
+
+## Data
+
+
+The example dataset used in this solution was originally released as part of a research collaboration of Worldline and
+the Machine Learning Group (http://mlg.ulb.ac.be) of ULB (Université Libre de Bruxelles) on big data mining and fraud
+detection.
+
+The dataset contains credit card transactions from European cardholders in 2013. As is common in fraud detection,
+it is highly unbalanced, with 492 fraudulent transactions out of the 284,807 total transactions. The dataset contains
+only numerical features, because the original features have been transformed for confidentiality using PCA. As a result,
+the dataset contains 28 PCA components, and two features that haven't been transformed, _Amount_ and _Time_.
+_Amount_ refers to the transaction amount, and _Time_ is the seconds elapsed between any transaction in the data
+and the first transaction.
+
+More details on current and past projects on related topics are available on
+https://www.researchgate.net/project/Fraud-detection-5 and the page of the
+[DefeatFraud](https://mlg.ulb.ac.be/wordpress/portfolio_page/defeatfraud-assessment-and-validation-of-deep-feature-engineering-and-learning-solutions-for-fraud-detection/) project
+
+We cite the following works:
+* Andrea Dal Pozzolo, Olivier Caelen, Reid A. Johnson and Gianluca Bontempi. Calibrating Probability with Undersampling for Unbalanced Classification. In Symposium on Computational Intelligence and Data Mining (CIDM), IEEE, 2015
+* Dal Pozzolo, Andrea; Caelen, Olivier; Le Borgne, Yann-Ael; Waterschoot, Serge; Bontempi, Gianluca. Learned lessons in credit card fraud detection from a practitioner perspective, Expert systems with applications,41,10,4915-4928,2014, Pergamon
+* Dal Pozzolo, Andrea; Boracchi, Giacomo; Caelen, Olivier; Alippi, Cesare; Bontempi, Gianluca. Credit card fraud detection: a realistic modeling and a novel learning strategy, IEEE transactions on neural networks and learning systems,29,8,3784-3797,2018,IEEE
+* Dal Pozzolo, Andrea Adaptive Machine learning for credit card fraud detection ULB MLG PhD thesis (supervised by G. Bontempi)
+* Carcillo, Fabrizio; Dal Pozzolo, Andrea; Le Borgne, Yann-Aël; Caelen, Olivier; Mazzer, Yannis; Bontempi, Gianluca. Scarff: a scalable framework for streaming credit card fraud detection with Spark, Information fusion,41, 182-194,2018,Elsevier
+* Carcillo, Fabrizio; Le Borgne, Yann-Aël; Caelen, Olivier; Bontempi, Gianluca. Streaming active learning strategies for real-life credit card fraud detection: assessment and visualization, International Journal of Data Science and Analytics, 5,4,285-300,2018,Springer International Publishing
 
 
 ## Contents
