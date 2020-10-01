@@ -102,11 +102,11 @@ def delete_s3_bucket(bucket_name):
 @helper.delete
 def on_delete(event, __):
     # remove sagemaker endpoints
-    stack_name = event["ResourceProperties"]["StackName"]
+    solution_prefix = event["ResourceProperties"]["SolutionPrefix"]
     endpoint_names = [
-        "{}-rcf".format(stack_name),
-        "{}-xgb".format(stack_name),
-        "{}-xgb-smote".format(stack_name)
+        "{}-rcf".format(solution_prefix),
+        "{}-xgb".format(solution_prefix),
+        "{}-xgb-smote".format(solution_prefix)
     ]
     for endpoint_name in endpoint_names:
         delete_sagemaker_model(endpoint_name)
@@ -116,15 +116,12 @@ def on_delete(event, __):
     # remove files in s3
     model_data_bucket = event["ResourceProperties"]["ModelDataBucketName"]
     output_bucket = event["ResourceProperties"]["OutputBucketName"]
-    log_bucket = event["ResourceProperties"]["LogBucketName"]
     delete_s3_objects(model_data_bucket)
     delete_s3_objects(output_bucket)
-    delete_s3_objects(log_bucket)
 
     # delete buckets
     delete_s3_bucket(model_data_bucket)
     delete_s3_bucket(output_bucket)
-    delete_s3_bucket(log_bucket)
 
 
 def handler(event, context):

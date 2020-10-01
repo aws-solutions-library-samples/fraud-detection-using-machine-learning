@@ -21,7 +21,9 @@ import boto3
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-STACK_NAME = os.environ['StackName']
+STREAM_NAME = os.environ['StreamName']
+SOLUTION_PREFIX = os.environ['SolutionPrefix']
+
 
 def lambda_handler(event, context):
     logger.info(event)
@@ -47,7 +49,7 @@ def lambda_handler(event, context):
 
 
 def get_anomaly_prediction(data):
-    sagemaker_endpoint_name = "{}-rcf".format(STACK_NAME)
+    sagemaker_endpoint_name = "{}-rcf".format(SOLUTION_PREFIX)
     sagemaker_runtime = boto3.client('sagemaker-runtime')
     response = sagemaker_runtime.invoke_endpoint(
         EndpointName=sagemaker_endpoint_name, ContentType='text/csv', Body=data)
@@ -59,7 +61,7 @@ def get_anomaly_prediction(data):
 
 
 def get_fraud_prediction(data, threshold=0.5):
-    sagemaker_endpoint_name = "{}-xgb".format(STACK_NAME)
+    sagemaker_endpoint_name = "{}-xgb".format(SOLUTION_PREFIX)
     sagemaker_runtime = boto3.client('sagemaker-runtime')
     response = sagemaker_runtime.invoke_endpoint(
         EndpointName=sagemaker_endpoint_name, ContentType='text/csv',Body=data)
@@ -72,7 +74,7 @@ def get_fraud_prediction(data, threshold=0.5):
 
 
 def store_data_prediction(output_dict, metadata):
-    firehose_delivery_stream = 'fraud-detection-firehose-stream'
+    firehose_delivery_stream = STREAM_NAME
     firehose = boto3.client('firehose', region_name=os.environ['AWS_REGION'])
 
     # Extract anomaly score and classifier prediction, if they exist

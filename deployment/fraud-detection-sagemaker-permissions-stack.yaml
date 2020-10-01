@@ -1,0 +1,241 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "((SO0056)) - fraud-detection-using-machine-learning SageMaker permissions stack"
+Parameters:
+  SolutionPrefix:
+    Description: The name of the prefix for the solution used for naming
+    Type: String
+  ModelDataBucketName:
+    Description: The name of the S3 bucket for the solution
+    Type: String
+  OutputBucketName:
+    Description: The name of the S3 bucket for the solution
+    Type: String
+  RESTAPIGateway:
+    Description: The name of the API Gateway being deployed
+    Type: String
+  StackVersion:
+    Description: The name of the template stack version
+    Type: String
+
+Mappings:
+  SolutionsS3BucketName:
+    release:
+      Prefix: "sagemaker-solutions"
+    development:
+      Prefix: "sagemaker-solutions-build"
+
+Resources:
+  NotebookInstanceExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub "${SolutionPrefix}-${AWS::Region}-nb-role"
+      ManagedPolicyArns:
+      - >-
+        arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - sagemaker.amazonaws.com
+                - lambda.amazonaws.com
+                - apigateway.amazonaws.com
+                - firehose.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W28
+            reason: Needs to be explicitly named to tighten launch permissions policy
+  NotebookInstanceIAMPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: !Sub "${SolutionPrefix}-nb-instance-policy"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          # Can list the contents of the SageMaker Solutions Amazon S3 Bucket
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              - !Sub
+                - "arn:aws:s3:::${SolutionsS3BucketNamePrefix}-${AWS::Region}"
+                - SolutionsS3BucketNamePrefix:
+                    Fn::FindInMap: [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+          # Can get objects from the SageMaker Solutions Amazon S3 Bucket
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource:
+              - !Sub
+                - "arn:aws:s3:::${SolutionsS3BucketNamePrefix}-${AWS::Region}/*"
+                - SolutionsS3BucketNamePrefix:
+                    Fn::FindInMap: [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+          # Can get, put and delete objects in the model-data bucket, and the buckets themselves (for SolutionAssistant)
+          - Effect: Allow
+            Action:
+              - s3:AbortMultipartUpload
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+                - !Sub "arn:aws:s3:::${ModelDataBucketName}/*"
+                - !Sub "arn:aws:s3:::${OutputBucketName}/*"
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:DeleteBucket
+              - s3:GetBucketLocation
+              - s3:ListBucketMultipartUploads
+            Resource:
+              - !Sub "arn:aws:s3:::${ModelDataBucketName}"
+              - !Sub "arn:aws:s3:::${OutputBucketName}"
+          # Needed by the invocation Lambda function
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:logs:'
+                - !Ref 'AWS::Region'
+                - ':'
+                - !Ref 'AWS::AccountId'
+                - ':log-group:/aws/lambda/*'
+          - Effect: Allow
+            Action:
+              - 'sagemaker:InvokeEndpoint'
+            Resource:
+              - 'arn:aws:sagemaker:*:*:endpoint/*'
+          - Effect: Allow
+            Action:
+              - 'firehose:PutRecord'
+              - 'firehose:PutRecordBatch'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:firehose:'
+                - !Ref 'AWS::Region'
+                - ':'
+                - !Ref 'AWS::AccountId'
+                - ':deliverystream/'
+                - !Ref SolutionPrefix
+                - '-firehose-stream'
+          # SageMaker
+          - Effect: Allow
+            Action:
+              - 'sagemaker:CreateTrainingJob'
+              - 'sagemaker:DescribeTrainingJob'
+              - 'sagemaker:CreateModel'
+              - 'sagemaker:DescribeModel'
+              - 'sagemaker:DeleteModel'
+              - 'sagemaker:CreateEndpoint'
+              - 'sagemaker:CreateEndpointConfig'
+              - 'sagemaker:DescribeEndpoint'
+              - 'sagemaker:DescribeEndpointConfig'
+              - 'sagemaker:DeleteEndpoint'
+              - 'sagemaker:DeleteEndpointConfig'
+              - 'sagemaker:InvokeEndpoint'
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:sagemaker:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':*'
+          - Effect: Allow
+            Action:
+              - 'ecr:GetDownloadUrlForLayer'
+              - 'ecr:BatchGetImage'
+              - 'ecr:BatchCheckLayerAvailability'
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:ecr:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':repository/*'
+          - Effect: Allow
+            Action:
+              - 'ec2:CreateVpcEndpoint'
+              - 'ec2:DescribeRouteTables'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'cloudwatch:PutMetricData'
+              - 'cloudwatch:GetMetricData'
+              - 'cloudwatch:GetMetricStatistics'
+              - 'cloudwatch:ListMetrics'
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:cloudwatch:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':*'
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:CreateLogStream'
+              - 'logs:DescribeLogStreams'
+              - 'logs:GetLogEvents'
+              - 'logs:PutLogEvents'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:logs:'
+                - !Ref 'AWS::Region'
+                - ':'
+                - !Ref 'AWS::AccountId'
+                - ':log-group:/aws/sagemaker/*'
+          - Effect: Allow
+            Action:
+              - 'iam:PassRole'
+            Resource:
+              - !GetAtt
+                - NotebookInstanceExecutionRole
+                - Arn
+            Condition:
+              StringEquals:
+                'iam:PassedToService': sagemaker.amazonaws.com
+          - Effect: Allow
+            Action:
+              - 'iam:GetRole'
+            Resource:
+              - !GetAtt
+                - NotebookInstanceExecutionRole
+                - Arn
+          - Effect: Allow
+            Action:
+              - 'execute-api:Invoke'
+            Resource:
+              - !Join
+                - ''
+                - - 'arn:aws:execute-api:'
+                  - !Ref 'AWS::Region'
+                  - ':'
+                  - !Ref 'AWS::AccountId'
+                  - ':'
+                  - !Ref RESTAPIGateway
+                  - /*/POST/*
+      Roles:
+        - !Ref NotebookInstanceExecutionRole
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W12
+            reason: >-
+              This policy needs to have * resource because some of the resources
+              are created dynamically and some of its actions are * resource
+              actions
+
+Outputs:
+  SageMakerRoleArn:
+    Description: "SageMaker Execution Role for the solution"
+    Value: !GetAtt NotebookInstanceExecutionRole.Arn

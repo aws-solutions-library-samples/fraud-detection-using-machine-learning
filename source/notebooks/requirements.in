@@ -9,4 +9,3 @@ seaborn
 docutils==0.14
 awscli
 botocore==1.17.4
-python-dotenv

@@ -28,7 +28,6 @@ protobuf==3.12.2          # via protobuf3-to-dict, sagemaker
 pyasn1==0.4.8             # via rsa
 pyparsing==2.4.7          # via matplotlib, packaging
 python-dateutil==2.8.1    # via botocore, matplotlib, pandas
-python-dotenv==0.13.0     # via -r requirements.in
 pytz==2020.1              # via pandas
 pyyaml==5.3.1             # via awscli
 requests==2.23.0          # via aws-requests-auth

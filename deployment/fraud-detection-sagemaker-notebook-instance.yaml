@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  (SO0056) - fraud-detection-using-machine-learning: Notebook instance stack
+Parameters:
+  SolutionPrefix:
+    Type: String
+    Default: "sm-soln-fraud-detection"
+  ParentStackName:
+    Type: String
+  SolutionName:
+    Type: String
+  StackVersion:
+    Type: String
+  ModelDataBucket:
+    Type: String
+  NotebookInstanceExecutionRoleArn:
+    Type: String
+  RESTAPIGateway:
+    Type: String
+
+Mappings:
+  SolutionsS3BucketName:
+    development:
+      Prefix: sagemaker-solutions-build
+    release:
+      Prefix: sagemaker-solutions
+
+Resources:
+  BasicNotebookInstance:
+    Type: 'AWS::SageMaker::NotebookInstance'
+    Properties:
+      InstanceType: ml.t3.medium
+      NotebookInstanceName: !Sub "${SolutionPrefix}-notebook-instance"
+      RoleArn: !Ref NotebookInstanceExecutionRoleArn
+      LifecycleConfigName: !GetAtt
+        - BasicNotebookInstanceLifecycleConfig
+        - NotebookInstanceLifecycleConfigName
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W1201
+            reason: Solution does not have KMS encryption enabled by default
+
+  BasicNotebookInstanceLifecycleConfig:
+    Type: 'AWS::SageMaker::NotebookInstanceLifecycleConfig'
+    Properties:
+      NotebookInstanceLifecycleConfigName: !Sub "${SolutionPrefix}-nb-lifecycle-config"
+      OnCreate:
+        - Content:
+            Fn::Base64: !Sub
+              - |
+                set -e
+                # perform following actions as ec2-user
+                sudo -u ec2-user -i <<EOF
+                cd /home/ec2-user/SageMaker
+                # copy source files
+                aws s3 sync s3://${SolutionsS3BucketNamePrefix}-${AWS::Region}/${SolutionName}/ .
+                unzip creditcardfraud.zip -d ./source/notebooks/
+                # create stack_outputs.json with stack resources that are required in notebook(s)
+                touch stack_outputs.json
+                echo '{' >> stack_outputs.json
+                echo '  "FraudStackName": "${ParentStackName}",' >> stack_outputs.json
+                echo '  "SolutionPrefix": "${SolutionPrefix}",' >> stack_outputs.json
+                echo '  "AwsAccountId": "${AWS::AccountId}",' >> stack_outputs.json
+                echo '  "AwsRegion": "${AWS::Region}",' >> stack_outputs.json
+                echo '  "IamRole": "${NotebookInstanceExecutionRoleArn}",' >> stack_outputs.json
+                echo '  "ModelDataBucket": "${ModelDataBucket}",' >> stack_outputs.json
+                echo '  "SolutionsS3Bucket": "${SolutionsS3BucketNamePrefix}-${AWS::Region}",' >> stack_outputs.json
+                echo '  "RESTAPIGateway": "${RESTAPIGateway}",' >> stack_outputs.json
+                echo '  "SagemakerMode": "NotebookInstance"' >> stack_outputs.json
+                echo '}' >> stack_outputs.json
+                echo "stack_outputs.json created:"
+                cat stack_outputs.json
+                EOF
+              - SolutionsS3BucketNamePrefix:
+                  Fn::FindInMap: [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+      OnStart:
+        - Content:
+            Fn::Base64: |
+              set -e
+              # perform following actions as ec2-user
+              sudo -u ec2-user -i <<EOF
+              /home/ec2-user/anaconda3/envs/python3/bin/python /home/ec2-user/SageMaker/source/env_setup.py --force --log-level DEBUG
+              EOF
+Outputs:
+  SageMakerNotebook:
+    Description: "Opens the Jupyter notebook to get started with model training"
+    Value: !Sub "https://${SolutionPrefix}-notebook-instance.notebook.${AWS::Region}.sagemaker.aws/notebooks/source/notebooks/sagemaker_fraud_detection.ipynb"
