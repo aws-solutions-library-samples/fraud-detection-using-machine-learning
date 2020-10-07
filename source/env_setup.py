@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import logging
 import sys
+from zipfile import ZipFile
 
 CURRENT_FILE = Path(__file__).resolve()
 CURRENT_FOLDER = CURRENT_FILE.parent
@@ -15,7 +16,7 @@ BIN_PATHS = {'NotebookInstance': Path('/usr/bin'), 'Studio': Path('/opt/conda/bi
 # Common setup
 
 def get_sagemaker_mode() -> str:
-    stack_outputs_file = Path(CURRENT_FOLDER.parent, 'stack_outputs.json')
+    stack_outputs_file = Path(CURRENT_FOLDER, 'stack_outputs.json')
     with open(stack_outputs_file) as f:
         outputs = json.load(f)
     sagemaker_mode = outputs['SagemakerMode']
@@ -167,6 +168,10 @@ def env_setup_notebook_instance() -> None:
 def env_setup_studio() -> None:
     logging.info('Starting environment setup for Studio.')
     py_exec = get_executable()
+    logging.info('Extracting data.')
+    with ZipFile(f"{CURRENT_FOLDER}/creditcardfraud.zip", 'r') as zf:
+        zf.extractall(path=f"{CURRENT_FOLDER}/notebooks")
+
     logging.info('Upgrading pip packages.')
     bash(f"""
     export PIP_DISABLE_PIP_VERSION_CHECK=1

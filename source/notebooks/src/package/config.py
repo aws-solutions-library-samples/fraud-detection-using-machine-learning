@@ -1,21 +1,21 @@
-from dotenv import load_dotenv
-import os
+import json
 from pathlib import Path
 
 from package import utils
 
 current_folder = utils.get_current_folder(globals())
-env_location = '../../../../.env'
-dotenv_filepath = Path(current_folder, env_location).resolve()
-assert dotenv_filepath.exists(), "Could not find .env file at {}".format(str(dotenv_filepath))
+cfn_stack_outputs_filepath = Path(current_folder, '../../../stack_outputs.json').resolve()
+assert cfn_stack_outputs_filepath.exists(), "Could not find stack_outputs.json file at {}".format(
+    str(cfn_stack_outputs_filepath))
 
-load_dotenv()
+with open(cfn_stack_outputs_filepath) as f:
+    cfn_stack_outputs = json.load(f)
 
-STACK_NAME = os.environ['FRAUD_STACK_NAME']
-AWS_ACCOUNT_ID = os.environ['AWS_ACCOUNT_ID']
-AWS_REGION = os.environ['AWS_REGION']
-SAGEMAKER_IAM_ROLE = os.environ['SAGEMAKER_IAM_ROLE']
-SOLUTIONS_S3_BUCKET = os.environ['SOLUTIONS_S3_BUCKET']
-
-MODEL_DATA_S3_BUCKET = os.environ['MODEL_DATA_S3_BUCKET']
-REST_API_GATEWAY = os.environ['REST_API_GATEWAY']
+STACK_NAME = cfn_stack_outputs['FraudStackName']
+SOLUTION_PREFIX = cfn_stack_outputs['SolutionPrefix']
+AWS_ACCOUNT_ID = cfn_stack_outputs['AwsAccountId']
+AWS_REGION = cfn_stack_outputs['AwsRegion']
+SAGEMAKER_IAM_ROLE = cfn_stack_outputs['IamRole']
+MODEL_DATA_S3_BUCKET = cfn_stack_outputs['ModelDataBucket']
+SOLUTIONS_S3_BUCKET = cfn_stack_outputs['SolutionsS3Bucket']
+REST_API_GATEWAY = cfn_stack_outputs['RESTAPIGateway']

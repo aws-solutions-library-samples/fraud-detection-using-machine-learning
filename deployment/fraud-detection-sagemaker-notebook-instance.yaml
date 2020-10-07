@@ -54,8 +54,9 @@ Resources:
                 sudo -u ec2-user -i <<EOF
                 cd /home/ec2-user/SageMaker
                 # copy source files
-                aws s3 sync s3://${SolutionsS3BucketNamePrefix}-${AWS::Region}/${SolutionName}/ .
-                unzip creditcardfraud.zip -d ./source/notebooks/
+                aws s3 sync s3://${SolutionsS3BucketNamePrefix}-${AWS::Region}/${SolutionName}/source .
+                unzip ./creditcardfraud.zip -d ./notebooks/
+                rm ./creditcardfraud.zip
                 # create stack_outputs.json with stack resources that are required in notebook(s)
                 touch stack_outputs.json
                 echo '{' >> stack_outputs.json
@@ -80,9 +81,9 @@ Resources:
               set -e
               # perform following actions as ec2-user
               sudo -u ec2-user -i <<EOF
-              /home/ec2-user/anaconda3/envs/python3/bin/python /home/ec2-user/SageMaker/source/env_setup.py --force --log-level DEBUG
+              /home/ec2-user/anaconda3/envs/python3/bin/python /home/ec2-user/SageMaker/env_setup.py --force --log-level DEBUG
               EOF
 Outputs:
   SageMakerNotebook:
     Description: "Opens the Jupyter notebook to get started with model training"
-    Value: !Sub "https://${SolutionPrefix}-notebook-instance.notebook.${AWS::Region}.sagemaker.aws/notebooks/source/notebooks/sagemaker_fraud_detection.ipynb"
+    Value: !Sub "https://${SolutionPrefix}-notebook-instance.notebook.${AWS::Region}.sagemaker.aws/notebooks/notebooks/sagemaker_fraud_detection.ipynb"
