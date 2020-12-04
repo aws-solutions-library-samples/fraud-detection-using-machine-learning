@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "((SO0056)) - fraud-detection-using-machine-learning demo stack"
+Parameters:
+  SolutionPrefix:
+    Description: The name of the prefix for the solution used for naming resources.
+    Type: String
+  SolutionsBucket:
+    Description: The bucket that contains the solution files.
+    Type: String
+  SolutionName:
+    Type: String
+  ExecutionRoleArn:
+    Description: The role used when invoking the enpoint.
+    Type: String
+
+Mappings:
+  RegionMap:
+    "us-west-1":
+      "XGBoost":  "746614075791.dkr.ecr.us-west-1.amazonaws.com"
+    "us-west-2":
+      "XGBoost":  "246618743249.dkr.ecr.us-west-2.amazonaws.com"
+    "us-east-1":
+      "XGBoost":  "683313688378.dkr.ecr.us-east-1.amazonaws.com"
+    "us-east-2":
+      "XGBoost":  "257758044811.dkr.ecr.us-east-2.amazonaws.com"
+    "ap-northeast-1":
+      "XGBoost":  "354813040037.dkr.ecr.ap-northeast-1.amazonaws.com"
+    "ap-northeast-2":
+      "XGBoost":  "366743142698.dkr.ecr.ap-northeast-2.amazonaws.com"
+    "ap-southeast-1":
+      "XGBoost":  "121021644041.dkr.ecr.ap-southeast-1.amazonaws.com"
+    "ap-southeast-2":
+      "XGBoost":  "783357654285.dkr.ecr.ap-southeast-2.amazonaws.com"
+    "ap-south-1":
+      "XGBoost":  "720646828776.dkr.ecr.ap-south-1.amazonaws.com"
+    "ap-east-1":
+      "XGBoost":  "651117190479.dkr.ecr.ap-east-1.amazonaws.com"
+    "ca-central-1":
+      "XGBoost":  "341280168497.dkr.ecr.ca-central-1.amazonaws.com"
+    "cn-north-1":
+      "XGBoost":  "450853457545.dkr.ecr.cn-north-1.amazonaws.com.cn"
+    "cn-northwest-1":
+      "XGBoost":  "451049120500.dkr.ecr.cn-northwest-1.amazonaws.com.cn"
+    "eu-central-1":
+      "XGBoost":  "492215442770.dkr.ecr.eu-central-1.amazonaws.com"
+    "eu-north-1":
+      "XGBoost":  "662702820516.dkr.ecr.eu-north-1.amazonaws.com"
+    "eu-south-1":
+      "XGBoost":  "048378556238.dkr.ecr.eu-north-1.amazonaws.com"
+    "eu-west-1":
+      "XGBoost":  "141502667606.dkr.ecr.eu-west-1.amazonaws.com"
+    "eu-west-2":
+      "XGBoost":  "764974769150.dkr.ecr.eu-west-2.amazonaws.com"
+    "eu-west-3":
+      "XGBoost":  "659782779980.dkr.ecr.eu-west-3.amazonaws.com"
+    "me-south-1":
+      "XGBoost":  "801668240914.dkr.ecr.me-south-1.amazonaws.com"
+    "sa-east-1":
+      "XGBoost":  " 737474898029.dkr.ecr.sa-east-1.amazonaws.com"
+    "us-gov-west-1":
+      "XGBoost":   "414596584902.dkr.ecr.us-gov-west-1.amazonaws.com"
+
+Resources:
+  FraudClassificationModel:
+    Type: "AWS::SageMaker::Model"
+    Properties:
+      ExecutionRoleArn: !Ref ExecutionRoleArn
+      PrimaryContainer:
+        Image: !Sub
+          - "${ContainerLocation}/sagemaker-xgboost:0.90-2-cpu-py3"
+          - ContainerLocation:
+              Fn::FindInMap: [RegionMap, !Ref "AWS::Region", "XGBoost"]
+        ModelDataUrl: !Sub "s3://${SolutionsBucket}/${SolutionName}/artifacts/xgboost-model.tar.gz"
+      ModelName: !Sub "${SolutionPrefix}-demo"
+  FraudClassificationEndpointConfig:
+    Type: "AWS::SageMaker::EndpointConfig"
+    Properties:
+      ProductionVariants:
+        - InitialInstanceCount: 1
+          InitialVariantWeight: 1.0
+          InstanceType: ml.m5.xlarge
+          ModelName: !GetAtt FraudClassificationModel.ModelName
+          VariantName: !GetAtt FraudClassificationModel.ModelName
+      EndpointConfigName: !Sub "${SolutionPrefix}-demo"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W1200
+            reason: Demo endpoint not given a KmsID
+  FraudClassificationEndpoint:
+    Type: "AWS::SageMaker::Endpoint"
+    Properties:
+      EndpointName: !Sub "${SolutionPrefix}-demo"
+      EndpointConfigName: !GetAtt FraudClassificationEndpointConfig.EndpointConfigName
+
+Outputs:
+  EndpointName:
+    Description: Name of the demo XGBoost fraud classification endpoint
+    Value: !GetAtt FraudClassificationEndpoint.EndpointName

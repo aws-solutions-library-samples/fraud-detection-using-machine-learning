@@ -1,5 +1,6 @@
 import boto3
 import sys
+import time
 
 sys.path.append('./site-packages')
 from crhelper import CfnResource
@@ -99,6 +100,26 @@ def delete_s3_bucket(bucket_name):
         )
 
 
+def bucket_delete_retry(bucket_name):
+    # Try to empty the bucket then delete the model-data bucket 5 times
+    # This is needed because the thread we open
+    s3_client = boto3.client("s3")
+    for _ in range(5):
+        delete_s3_objects(bucket_name)
+        delete_s3_bucket(bucket_name)
+
+        # Give the delete op time to finish
+        time.sleep(10)
+
+        try:
+            _ = s3_client.head_bucket(Bucket=bucket_name)
+        except s3_client.exceptions.ClientError:
+            break  # This is good, the bucket was deleted, so we just exit the loop
+
+        # Otherwise wait a minute and try again
+        time.sleep(60)
+
+
 @helper.delete
 def on_delete(event, __):
     # remove sagemaker endpoints
@@ -113,15 +134,11 @@ def on_delete(event, __):
         delete_sagemaker_endpoint_config(endpoint_name)
         delete_sagemaker_endpoint(endpoint_name)
 
-    # remove files in s3
+    # delete buckets
     model_data_bucket = event["ResourceProperties"]["ModelDataBucketName"]
     output_bucket = event["ResourceProperties"]["OutputBucketName"]
-    delete_s3_objects(model_data_bucket)
-    delete_s3_objects(output_bucket)
-
-    # delete buckets
-    delete_s3_bucket(model_data_bucket)
-    delete_s3_bucket(output_bucket)
+    bucket_delete_retry(model_data_bucket)
+    bucket_delete_retry(output_bucket)
 
 
 def handler(event, context):

@@ -4,7 +4,6 @@ Description: >-
 Parameters:
   SolutionPrefix:
     Type: String
-    Default: "sm-soln-fraud-detection"
   ParentStackName:
     Type: String
   SolutionName:
@@ -17,19 +16,62 @@ Parameters:
     Type: String
   RESTAPIGateway:
     Type: String
+  TestOutputsS3Bucket:
+    Type: String
 
 Mappings:
   SolutionsS3BucketName:
     development:
-      Prefix: sagemaker-solutions-build
+      Prefix: sagemaker-solutions-devo
     release:
-      Prefix: sagemaker-solutions
+      Prefix: sagemaker-solutions-prod
+  NotebookInstanceType:
+    "af-south-1":
+        Type: ml.t3.medium
+    "ap-east-1":
+        Type: ml.t3.medium
+    "ap-northeast-1":
+        Type: ml.t3.medium
+    "ap-northeast-2":
+        Type: ml.t2.medium
+    "ap-south-1":
+        Type: ml.t2.medium
+    "ap-southeast-1":
+        Type: ml.t3.medium
+    "ap-southeast-2":
+        Type: ml.t3.medium
+    "ca-central-1":
+        Type: ml.t3.medium
+    "eu-central-1":
+        Type: ml.t3.medium
+    "eu-north-1":
+        Type: ml.t3.medium
+    "eu-south-1":
+        Type: ml.t3.medium
+    "eu-west-1":
+        Type: ml.t3.medium
+    "eu-west-2":
+        Type: ml.t3.medium
+    "eu-west-3":
+        Type: ml.t3.medium
+    "me-south-1":
+        Type: ml.t3.medium
+    "sa-east-1":
+        Type: ml.t3.medium
+    "us-east-1":
+        Type: ml.t3.medium
+    "us-east-2":
+        Type: ml.t3.medium
+    "us-west-1":
+        Type: ml.t3.medium
+    "us-west-2":
+        Type: ml.t3.medium
 
 Resources:
   BasicNotebookInstance:
     Type: 'AWS::SageMaker::NotebookInstance'
     Properties:
-      InstanceType: ml.t3.medium
+      InstanceType: !FindInMap [NotebookInstanceType, !Ref "AWS::Region", Type]
       NotebookInstanceName: !Sub "${SolutionPrefix}-notebook-instance"
       RoleArn: !Ref NotebookInstanceExecutionRoleArn
       LifecycleConfigName: !GetAtt
@@ -55,8 +97,8 @@ Resources:
                 cd /home/ec2-user/SageMaker
                 # copy source files
                 aws s3 sync s3://${SolutionsS3BucketNamePrefix}-${AWS::Region}/${SolutionName}/source .
-                unzip ./creditcardfraud.zip -d ./notebooks/
-                rm ./creditcardfraud.zip
+                # copy test files
+                aws s3 sync s3://${SolutionsS3BucketNamePrefix}-${AWS::Region}/${SolutionName}/test ./test
                 # create stack_outputs.json with stack resources that are required in notebook(s)
                 touch stack_outputs.json
                 echo '{' >> stack_outputs.json
@@ -66,22 +108,33 @@ Resources:
                 echo '  "AwsRegion": "${AWS::Region}",' >> stack_outputs.json
                 echo '  "IamRole": "${NotebookInstanceExecutionRoleArn}",' >> stack_outputs.json
                 echo '  "ModelDataBucket": "${ModelDataBucket}",' >> stack_outputs.json
-                echo '  "SolutionsS3Bucket": "${SolutionsS3BucketNamePrefix}-${AWS::Region}",' >> stack_outputs.json
+                echo '  "SolutionsS3Bucket": "${SolutionsS3BucketNamePrefix}",' >> stack_outputs.json
                 echo '  "RESTAPIGateway": "${RESTAPIGateway}",' >> stack_outputs.json
+                echo '  "TestOutputsS3Bucket": "${TestOutputsS3Bucket}",' >> stack_outputs.json
+                echo '  "SolutionName": "${SolutionName}",' >> stack_outputs.json
                 echo '  "SagemakerMode": "NotebookInstance"' >> stack_outputs.json
                 echo '}' >> stack_outputs.json
                 echo "stack_outputs.json created:"
                 cat stack_outputs.json
+                # Replace placeholders
+                cd /home/ec2-user/SageMaker/notebooks
+                sed -s -i 's/HUB_1P_IMAGE/conda_python3/g' *.ipynb
                 EOF
               - SolutionsS3BucketNamePrefix:
                   Fn::FindInMap: [SolutionsS3BucketName, Ref: StackVersion, Prefix]
       OnStart:
         - Content:
             Fn::Base64: |
+              #!/bin/bash
               set -e
               # perform following actions as ec2-user
               sudo -u ec2-user -i <<EOF
               /home/ec2-user/anaconda3/envs/python3/bin/python /home/ec2-user/SageMaker/env_setup.py --force --log-level DEBUG
+              cd /home/ec2-user/SageMaker
+              for nb in notebooks/*.ipynb; do python ./scripts/set_kernelspec.py --notebook "$nb" --kernel "conda_python3" --display-name "conda_python3"; done
+              # Optionally run the solution's notebook if this was an integration test launch
+              nohup /home/ec2-user/anaconda3/envs/python3/bin/python ./test/run_notebook.py > ./test/run_notebook.log 2>&1 &
+              echo "OnStart script completed!"
               EOF
 Outputs:
   SageMakerNotebook:

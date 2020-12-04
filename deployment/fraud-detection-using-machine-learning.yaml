@@ -10,11 +10,11 @@ Parameters:
       Can be the same as the stack name used by AWS CloudFormation, but this field has extra
       constraints because it's used to name resources with restrictions (e.g. Amazon S3 bucket
       names cannot contain capital letters).
-    AllowedPattern: '^sm-soln-fraud-[a-z0-9\-]{1,20}$'
+    AllowedPattern: '^sagemaker-soln-fdml[a-z0-9\-]{1,19}$'
     ConstraintDescription: |
-      Only allowed to use lowercase letters, hyphens and/or numbers.
-      Should also start with 'sm-soln-fraud-' for permission management.
-    Default: "sm-soln-fraud-detection"
+      Should start with 'sagemaker-soln-fdml-' for permission management, followed by up to 19
+      characters. Only allowed to use lowercase letters, hyphens and/or numbers.
+    Default: "sagemaker-soln-fdml-"
   CreateSageMakerNotebookInstance:
     Description: Create a SageMaker Notebook Instance as part of the stack?
     Type: String
@@ -47,6 +47,12 @@ Parameters:
     Type: String
     Default: "Fraud-detection-using-machine-learning"
     AllowedPattern: '^Fraud-detection-using-machine-learning-?[a-z\-]*$'
+  TestOutputsS3Bucket:
+    Description: |
+      This bucket is used to store output files when the solution is tested. Should be left blank, unless this is an automated launch.
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^sagemaker-soln-[a-z0-9\-\.]{1,48}$'
   KinesisFirehosePrefix:
     Type: String
     Default: fraud-detection/firehose/
@@ -75,15 +81,16 @@ Mappings:
     development:
       Prefix: sagemaker-solutions-build
     release:
-      Prefix: sagemaker-solutions
+      Prefix: sagemaker-solutions-prod
 Conditions:
   CreateSageMakerNotebookInstance: !Equals [ !Ref CreateSageMakerNotebookInstance, 'true' ]
+  CreateDemoEndpoint: !Equals [ !Ref CreateSageMakerNotebookInstance, 'false' ]
   CreateCustomSolutionRole: !Equals [!Ref IamRole, ""]
 Resources:
   ModelDataBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
-      BucketName: !Sub ${SolutionPrefix}-${AWS::Region}-${AWS::AccountId}-model-data
+      BucketName: !Sub ${SolutionPrefix}-${AWS::AccountId}-md
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -105,7 +112,7 @@ Resources:
   OutputBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
-      BucketName: !Sub ${SolutionPrefix}-${AWS::Region}-${AWS::AccountId}-output
+      BucketName: !Sub ${SolutionPrefix}-${AWS::AccountId}-out
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
@@ -190,6 +197,8 @@ Resources:
     Type: 'AWS::ApiGateway::Account'
     Properties:
       CloudWatchRoleArn: !If [CreateCustomSolutionRole, !GetAtt SageMakerPermissionsStack.Outputs.SageMakerRoleArn, !Ref IamRole]
+    DependsOn:
+      - RESTAPIGateway
   LambdaAPIPermission:
     Type: 'AWS::Lambda::Permission'
     Properties:
@@ -289,7 +298,7 @@ Resources:
     Type: "AWS::CloudFormation::Stack"
     Properties:
       TemplateURL: !Sub
-      - "https://${SolutionsS3BucketNamePrefix}-${AWS::Region}.s3.amazonaws.com/${SolutionName}/deployment/solution-assistant/solution-assistant.yaml"
+      - "https://${SolutionsS3BucketNamePrefix}-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/${SolutionName}/deployment/solution-assistant/solution-assistant.yaml"
       - SolutionsS3BucketNamePrefix:
           Fn::FindInMap: [SolutionsS3BucketName, Ref: StackVersion, Prefix]
       Parameters:
@@ -309,7 +318,7 @@ Resources:
     Condition: CreateSageMakerNotebookInstance
     Properties:
       TemplateURL: !Sub
-      - "https://${SolutionsS3BucketNamePrefix}-${AWS::Region}.s3.amazonaws.com/${SolutionName}/deployment/fraud-detection-sagemaker-notebook-instance.yaml"
+      - "https://${SolutionsS3BucketNamePrefix}-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/${SolutionName}/deployment/fraud-detection-sagemaker-notebook-instance.yaml"
       - SolutionsS3BucketNamePrefix:
           Fn::FindInMap: [SolutionsS3BucketName, Ref: StackVersion, Prefix]
       Parameters:
@@ -320,21 +329,41 @@ Resources:
         ModelDataBucket: !Ref ModelDataBucket
         NotebookInstanceExecutionRoleArn: !If [CreateCustomSolutionRole, !GetAtt SageMakerPermissionsStack.Outputs.SageMakerRoleArn, !Ref IamRole]
         RESTAPIGateway: !Ref RESTAPIGateway
+        TestOutputsS3Bucket: !Ref TestOutputsS3Bucket
 
   SageMakerPermissionsStack:
     Type: "AWS::CloudFormation::Stack"
     Condition: CreateCustomSolutionRole
     Properties:
       TemplateURL: !Sub
-      - "https://${SolutionsS3BucketNamePrefix}-${AWS::Region}.s3.amazonaws.com/${SolutionName}/deployment/fraud-detection-sagemaker-permissions-stack.yaml"
+      - "https://${SolutionsS3BucketNamePrefix}-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/${SolutionName}/deployment/fraud-detection-sagemaker-permissions-stack.yaml"
       - SolutionsS3BucketNamePrefix:
           !FindInMap [SolutionsS3BucketName, Ref: StackVersion, Prefix]
       Parameters:
         SolutionPrefix: !Ref SolutionPrefix
-        ModelDataBucketName: !Sub ${SolutionPrefix}-${AWS::Region}-${AWS::AccountId}-model-data
-        OutputBucketName: !Sub ${SolutionPrefix}-${AWS::Region}-${AWS::AccountId}-output
+        ModelDataBucketName: !Ref ModelDataBucket
+        OutputBucketName: !Ref OutputBucket
         RESTAPIGateway: !Ref RESTAPIGateway
         StackVersion: !Ref StackVersion
+        RootStackID: !Ref AWS::StackId
+        TestOutputsS3Bucket: !Ref TestOutputsS3Bucket
+
+  DemoEndpointStack:
+    Type: "AWS::CloudFormation::Stack"
+    Condition: CreateDemoEndpoint
+    Properties:
+      TemplateURL: !Sub
+      - "https://${SolutionsS3BucketNamePrefix}-${AWS::Region}.s3.${AWS::Region}.amazonaws.com/${SolutionName}/deployment/fraud-detection-sagemaker-demo-stack.yaml"
+      - SolutionsS3BucketNamePrefix:
+          !FindInMap [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+      Parameters:
+        SolutionPrefix: !Ref SolutionPrefix
+        SolutionsBucket: !Sub
+          - "${SolutionsS3BucketNamePrefix}-${AWS::Region}"
+          - SolutionsS3BucketNamePrefix:
+              !FindInMap [SolutionsS3BucketName, Ref: StackVersion, Prefix]
+        SolutionName: !Ref SolutionName
+        ExecutionRoleArn: !If [CreateCustomSolutionRole, !GetAtt SageMakerPermissionsStack.Outputs.SageMakerRoleArn, !Ref IamRole]
 
 Outputs:
   SageMakerNotebook:
@@ -367,3 +396,10 @@ Outputs:
       - CreateSageMakerNotebookInstance
       - "NotebookInstance"
       - "Studio"
+  DemoEndpointName:
+    Condition: CreateDemoEndpoint
+    Value: DemoEndpointStack.Outputs.EndpointName
+  SolutionName:
+    Value: !Ref SolutionName
+  TestOutputsS3Bucket:
+    Value: !Ref TestOutputsS3Bucket

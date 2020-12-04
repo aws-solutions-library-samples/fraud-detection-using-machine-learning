@@ -1,5 +1,13 @@
 from pathlib import Path
 import os
+import json
+
+
+def get_notebook_name():
+    with open('/opt/ml/metadata/resource-metadata.json') as openfile:
+        data = json.load(openfile)
+    notebook_name = data['ResourceName']
+    return notebook_name
 
 
 def get_current_folder(global_variables):

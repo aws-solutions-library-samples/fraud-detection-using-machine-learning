@@ -3,9 +3,10 @@ aws_requests_auth
 matplotlib
 scikit-learn
 pandas
-sagemaker
+papermill
+sagemaker==1.72.0
+traitlets==4.3.3
 boto3
 seaborn
-docutils==0.14
 awscli
-botocore==1.17.4
+watchtower

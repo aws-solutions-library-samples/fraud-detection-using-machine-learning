@@ -19,3 +19,6 @@ SAGEMAKER_IAM_ROLE = cfn_stack_outputs['IamRole']
 MODEL_DATA_S3_BUCKET = cfn_stack_outputs['ModelDataBucket']
 SOLUTIONS_S3_BUCKET = cfn_stack_outputs['SolutionsS3Bucket']
 REST_API_GATEWAY = cfn_stack_outputs['RESTAPIGateway']
+SOLUTION_NAME = cfn_stack_outputs['SolutionName']
+TEST_OUTPUTS_S3_BUCKET = cfn_stack_outputs.get('TestOutputsS3Bucket', "")
+SAGEMAKER_MODE = cfn_stack_outputs['SagemakerMode']

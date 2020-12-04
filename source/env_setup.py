@@ -4,7 +4,6 @@ from pathlib import Path
 import subprocess
 import logging
 import sys
-from zipfile import ZipFile
 
 CURRENT_FILE = Path(__file__).resolve()
 CURRENT_FOLDER = CURRENT_FILE.parent
@@ -151,6 +150,13 @@ def env_setup_notebook_instance() -> None:
     rm -rf /home/ec2-user/anaconda3/envs/python3/lib/python3.6/site-packages/docutils-*
     """)
 
+    # This is due to papermill->black causing an inconsistency
+    logging.info("Removing incompatible package")
+    bash(f"""
+    export PIP_DISABLE_PIP_VERSION_CHECK=1
+    {py_exec} -m pip uninstall -y enum34
+    """)
+
     logging.info('Upgrading pip packages.')
     bash(f"""
     export PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -163,27 +169,25 @@ def env_setup_notebook_instance() -> None:
     {py_exec} -m pip install -r {CURRENT_FOLDER}/notebooks/requirements.txt
     {py_exec} -m pip install -e {CURRENT_FOLDER}/notebooks/
     """)
+
+    # This required for us to run papermill on a different env from where it was installed
+    # logging.info("Update nb_conda_kernels")
+    # # nohup because conda env solving is slow
+    # bash("""
+    # nohup conda update -n python3 nb_conda_kernels -y &
+    # """)
 
 
 def env_setup_studio() -> None:
     logging.info('Starting environment setup for Studio.')
     py_exec = get_executable()
-    logging.info('Extracting data.')
-    with ZipFile(f"{CURRENT_FOLDER}/creditcardfraud.zip", 'r') as zf:
-        zf.extractall(path=f"{CURRENT_FOLDER}/notebooks")
 
-    logging.info('Upgrading pip packages.')
+    logging.info('Installing local packages.')
     bash(f"""
     export PIP_DISABLE_PIP_VERSION_CHECK=1
-    {py_exec} -m pip  install --upgrade pyyaml --ignore-installed
-    """)
-
-    logging.info('Installing pip packages.')
-    bash(f"""
-    export PIP_DISABLE_PIP_VERSION_CHECK=1
-    {py_exec} -m pip install -r {CURRENT_FOLDER}/notebooks/requirements.txt
     {py_exec} -m pip install -e {CURRENT_FOLDER}/notebooks/
     """)
+
     logging.info('Completed environment setup for Studio.')
 
 

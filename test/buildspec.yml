@@ -1,0 +1,121 @@
+version: 0.2
+
+batch:
+  fast-fail: false
+  build-list:
+    - identifier: us_west_2
+      env:
+        variables:
+          REGION: us-west-2
+    - identifier: me_south_1
+      env:
+        variables:
+          REGION: me-south-1
+    - identifier: ap_east_1
+      env:
+        variables:
+          REGION: ap-east-1
+    - identifier: ap_northeast_1
+      env:
+        variables:
+          REGION: ap-northeast-1
+    - identifier: ap_northeast_2
+      env:
+        variables:
+          REGION: ap-northeast-2
+    - identifier: ap_south_1
+      env:
+        variables:
+          REGION: ap-south-1
+    - identifier: ap_southeast_1
+      env:
+        variables:
+          REGION: ap-southeast-1
+    - identifier: ap_southeast_2
+      env:
+        variables:
+          REGION: ap-southeast-2
+    - identifier: ca_central_1
+      env:
+        variables:
+          REGION: ca-central-1
+    - identifier: eu_central_1
+      env:
+        variables:
+          REGION: eu-central-1
+    - identifier: eu_north_1
+      env:
+        variables:
+          REGION: eu-north-1
+    - identifier: eu_west_1
+      env:
+        variables:
+          REGION: eu-west-1
+    - identifier: eu_west_2
+      env:
+        variables:
+          REGION: eu-west-2
+    - identifier: eu_west_3
+      env:
+        variables:
+          REGION: eu-west-3
+    - identifier: sa_east_1
+      env:
+        variables:
+          REGION: sa-east-1
+    - identifier: us_east_1
+      env:
+        variables:
+          REGION: us-east-1
+    - identifier: us_east_2
+      env:
+        variables:
+          REGION: us-east-2
+    - identifier: us_west_1
+      env:
+        variables:
+          REGION: us-west-1
+
+env:
+  variables:
+    STACK_PREFIX: "sagemaker-soln-fdml-ci"
+  shell: 'bash'
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.x
+    commands:
+      - pip3 install --upgrade pip
+      - pip3 install jupyter
+      - pip3 install papermill
+  pre_build:
+    commands:
+      - export CI_BUCKET="${STACK_PREFIX}-${CODEBUILD_BUILD_ID:(-8)}-$REGION"
+      - export STACK_NAME="${STACK_PREFIX}-${BRANCH}-${CODEBUILD_BUILD_ID:(-8)}"
+      - echo "Testing removal of CI bucket, in case it's left over from previous run"
+      - aws s3 rb --force "s3://${CI_BUCKET}" --region $REGION || true
+  build:
+    commands:
+      - echo "Starting build `date` in `pwd`"
+      - ls .
+      - jupyter kernelspec list
+      - aws s3 mb "s3://${CI_BUCKET}" --region $REGION
+      - aws s3api wait bucket-exists --bucket "${CI_BUCKET}"
+      - >
+        papermill ./test/test_deployment.ipynb ./test/test_deployment_out.ipynb
+        -p REGION "${REGION}" -p STACK_NAME "${STACK_NAME}"
+        -p BRANCH "${BRANCH}" -p CI_BUCKET "${CI_BUCKET}"
+        -p SOLUTIONS_BUCKET $SOLUTIONS_BUCKET
+        -k python3
+        --log-output
+  post_build:
+    commands:
+      - aws s3 rb --force "s3://${CI_BUCKET}" --region $REGION
+      - aws cloudformation --region $REGION delete-stack --stack-name "${STACK_NAME}"
+      - aws cloudformation --region $REGION wait stack-delete-complete --stack-name "${STACK_NAME}"
+      - echo "Build completed `date`"
+
+artifacts:
+  files:
+      - "**/*"

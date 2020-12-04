@@ -10,9 +10,9 @@ To get started quickly, use the following quick-launch link to launch a CloudFor
 
 | Region | Stack |
 | ---- | ---- |
-|US East (N. Virginia) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=https://sagemaker-solutions-us-east-1.s3.amazonaws.com/Fraud-detection-using-machine-learning/deployment/fraud-detection-using-machine-learning.yaml&stackName=SageMaker-Fraud-Machine-Learning) |
-|US East (Ohio) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-east-2.console.aws.amazon.com/cloudformation/home?region=us-east-2#/stacks/create/review?templateURL=https://sagemaker-solutions-us-east-2.s3.us-east-2.amazonaws.com/Fraud-detection-using-machine-learning/deployment/fraud-detection-using-machine-learning.yaml&stackName=SageMaker-Fraud-Machine-Learning) |
-|US West (Oregon) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?templateURL=https://sagemaker-solutions-us-west-2.s3-us-west-2.amazonaws.com/Fraud-detection-using-machine-learning/deployment/fraud-detection-using-machine-learning.yaml&stackName=SageMaker-Fraud-Machine-Learning) |
+|US East (N. Virginia) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=https://sagemaker-solutions-prod-us-east-1.s3.us-east-1.amazonaws.com/Fraud-detection-using-machine-learning/deployment/fraud-detection-using-machine-learning.yaml&stackName=SageMaker-Fraud-Machine-Learning) |
+|US East (Ohio) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-east-2.console.aws.amazon.com/cloudformation/home?region=us-east-2#/stacks/create/review?templateURL=https://sagemaker-solutions-prod-us-east-2.s3.us-east-2.amazonaws.com/Fraud-detection-using-machine-learning/deployment/fraud-detection-using-machine-learning.yaml&stackName=SageMaker-Fraud-Machine-Learning) |
+|US West (Oregon) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?templateURL=https://sagemaker-solutions-prod-us-west-2.s3.us-west-2.amazonaws.com/Fraud-detection-using-machine-learning/deployment/fraud-detection-using-machine-learning.yaml&stackName=SageMaker-Fraud-Machine-Learning) |
 
 
 ### Additional Instructions
@@ -38,7 +38,7 @@ Both of the trained models are deployed to Amazon SageMaker managed real-time en
 
 The model training and endpoint deployment is orchestrated by running a [jupyter notebook](source/notebooks/sagemaker_fraud_detection.ipynb) on a SageMaker Notebook instance. The jupyter notebook runs a demonstration of the project using the aforementioned anonymized credit card dataset that is automatically downloaded to the Amazon S3 Bucket created when you launch the solution. However, the notebook can be modified to run the project on a custom dataset in S3. The notebook instance also contains some example code that shows how to invoke the REST API for inference.
 
-In order to encapsulate the project as a stand-alone microservice, Amazon API Gateway is used to provide a REST API, that is backed by an AWS Lambda function. The Lambda function runs the [code](https://github.com/awslabs/fraud-detection-using-machine-learning/blob/master/source/fraud_detection/index.py) to preprocess incoming transactions, invoke sagemaker endpoints, merge results from both endpoints if necessary, store the model inputs and model predictions in S3 via Kinesis Firehose, and provide a response to the client.
+In order to encapsulate the project as a stand-alone microservice, Amazon API Gateway is used to provide a REST API, that is backed by an AWS Lambda function. The Lambda function runs the code necessary to preprocess incoming transactions, invoke sagemaker endpoints, merge results from both endpoints if necessary, store the model inputs and model predictions in S3 via Kinesis Firehose, and provide a response to the client.
 
 ## Data
 
@@ -78,12 +78,16 @@ We cite the following works:
   * `notebooks/`
     * `src`
       * `package`
-        * `config.py`: Read in the environment variables set by cloudformation stack creation
+        * `config.py`: Read in the environment variables set during the Amazon CloudFormation stack creation
         * `generate_endpoint_traffic.py`: Custom script to show how to send transaction traffic to REST API for inference
         * `util.py`: Helper function and utilities
     * `sagemaker_fraud_detection.ipynb`: Orchestrates the solution. Trains the models and deploys the trained model
-  * `setup/`
-    * `on-start.sh`: Bash script to setup sagemaker notebook environment with necessary dependencies
+    * `endpoint_demo.ipynb`: A small notebook that demonstrates how one can use the solution's endpoint to make prediction.
+  * `scripts/`
+    * `set_kernelspec.py`: Used to update the kernelspec name at deployment.
+  * `test/`
+    * Files that are used to automatically test the solution
+
 
 ## License
 
