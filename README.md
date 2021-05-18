@@ -6,11 +6,15 @@ Specifically, we show how to use Amazon SageMaker to train supervised and unsupe
 
 ## Getting Started
 
+You will need an AWS account to use this solution. Sign up for an account [here](https://aws.amazon.com/).
+
 To run this JumpStart 1P Solution and have the infrastructure deploy to your AWS account you will need to create an active SageMaker Studio instance (see [Onboard to Amazon SageMaker Studio](https://docs.aws.amazon.com/sagemaker/latest/dg/gs-studio-onboard.html)). When your Studio instance is *Ready*, use the instructions in [SageMaker JumpStart](https://docs.aws.amazon.com/sagemaker/latest/dg/studio-jumpstart.html) to 1-Click Launch the solution.
 
-The solution artifacts are included in this GitHub repository for reference. 
+The solution artifacts are included in this GitHub repository for reference.
 
-Note: Solutions are available in most regions including us-west-2, and us-east-1.
+*Note*: Solutions are available in most regions including us-west-2, and us-east-1.
+
+**Caution**: Cloning this GitHub repository and running the code manually could lead to unexpected issues! Use the AWS CloudFormation template. You'll get an Amazon SageMaker Notebook instance that's been correctly setup and configured to access the other resources in the solution.
 
 ## Architecture
 
