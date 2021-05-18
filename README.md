@@ -6,20 +6,11 @@ Specifically, we show how to use Amazon SageMaker to train supervised and unsupe
 
 ## Getting Started
 
-To get started quickly, use the following quick-launch link to launch a CloudFormation Stack create form and follow the instructions below to deploy the resources in this project.
+To run this JumpStart 1P Solution and have the infrastructure deploy to your AWS account you will need to create an active SageMaker Studio instance (see [Onboard to Amazon SageMaker Studio](https://docs.aws.amazon.com/sagemaker/latest/dg/gs-studio-onboard.html)). When your Studio instance is *Ready*, use the instructions in [SageMaker JumpStart](https://docs.aws.amazon.com/sagemaker/latest/dg/studio-jumpstart.html) to 1-Click Launch the solution.
 
-| Region | Stack |
-| ---- | ---- |
-|US East (N. Virginia) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?templateURL=https://sagemaker-solutions-prod-us-east-1.s3.us-east-1.amazonaws.com/Fraud-detection-using-machine-learning/3.0.2-github/deployment/fraud-detection-using-machine-learning.yaml&stackName=sagemaker-soln-fdml-fraud) |
-|US East (Ohio) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-east-2.console.aws.amazon.com/cloudformation/home?region=us-east-2#/stacks/create/review?templateURL=https://sagemaker-solutions-prod-us-east-2.s3.us-east-2.amazonaws.com/Fraud-detection-using-machine-learning/3.0.2-github/deployment/fraud-detection-using-machine-learning.yaml&stackName=sagemaker-soln-fdml-fraud) |
-|US West (Oregon) | [<img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png">](https://us-west-2.console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?templateURL=https://sagemaker-solutions-prod-us-west-2.s3.us-west-2.amazonaws.com/Fraud-detection-using-machine-learning/3.0.2-github/deployment/fraud-detection-using-machine-learning.yaml&stackName=sagemaker-soln-fdml-fraud) |
+The solution artifacts are included in this GitHub repository for reference. 
 
-
-### Additional Instructions
-
-* On the stack creation page, check the box to acknowledge creation of IAM resources, and click **Create Stack**. This should trigger the creation of the CloudFormation stack.
-
-* Once the stack is created, go to the Outputs tab and click on the *SageMakerNotebook* link. This will open up a Jupyter notebook named `sagemaker_fraud_detection` in a SageMaker Notebook instance where you can run the code. Follow the instructions in the notebook to run the solution. You can use `Cells->Run All` from the Jupyter menu to run all cells, and return to the notebook later after all cells have executed. The total time to run all cells should be around 40 minutes.
+Note: Solutions are available in most regions including us-west-2, and us-east-1.
 
 ## Architecture
 
