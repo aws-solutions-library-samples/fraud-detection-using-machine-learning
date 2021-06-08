@@ -107,7 +107,7 @@ papermill==2.2.2
     # via -r requirements.in
 pathspec==0.8.1
     # via black
-pillow==8.1.1
+pillow==8.2.0
     # via matplotlib
 protobuf3-to-dict==0.1.5
     # via sagemaker
@@ -131,7 +131,7 @@ python-dateutil==2.8.1
     #   pandas
 pytz==2020.4
     # via pandas
-pyyaml==5.4
+pyyaml==5.3.1
     # via
     #   awscli
     #   papermill
@@ -143,7 +143,7 @@ requests==2.25.0
     # via
     #   aws-requests-auth
     #   papermill
-rsa==4.7
+rsa==4.5
     # via awscli
 s3transfer==0.3.3
     # via
